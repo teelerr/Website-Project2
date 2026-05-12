@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>An Anniversary Quest — Part 2</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #282828;
+        --fg: #ebdbb2;
+        --yellow: #d79921;
+      }
+      body {
+        background-image: url("background.jpg");
+        background-size: cover;
+        background-position: center;
+        background-color: var(--bg);
+        color: var(--fg);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        overflow: hidden;
+        font-family: "Fira Mono", monospace;
+        transition: background-image 0.5s ease-in-out;
+      }
+      #gameContainer {
+        position: relative;
+        width: 960px;
+        height: 540px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        border: 4px solid var(--yellow);
+        border-radius: 6px;
+        overflow: hidden;
+        background: #000 !important;
+      }
+      #mapOverlay {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        max-width: 80%;
+        max-height: 75%;
+        object-fit: contain;
+        z-index: 6;
+        display: none;
+        image-rendering: pixelated;
+        border: 4px solid var(--yellow);
+        box-shadow: 0 0 40px rgba(0,0,0,0.9);
+      }
+      #characterSprite {
+        position: absolute;
+        bottom: 160px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: auto;
+        max-height: 220px;
+        z-index: 5;
+        animation: bob 3s ease-in-out infinite;
+        image-rendering: pixelated;
+        pointer-events: none;
+      }
+      #letterOverlay {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 70%; height: 60%;
+        background: #fdf6e3;
+        color: #5c4033;
+        padding: 40px;
+        border-radius: 2px;
+        box-shadow: 0 0 50px rgba(0,0,0,0.9);
+        display: none;
+        z-index: 100;
+        font-family: "Georgia", serif;
+        line-height: 1.6;
+        border: 8px double #d5c4a1;
+        overflow-y: auto;
+      }
+      #letterContent { white-space: pre-wrap; }
+      @keyframes bob {
+        0%, 100% { transform: translateX(-50%) translateY(0); }
+        50%       { transform: translateX(-50%) translateY(-12px); }
+      }
+      #rpgCanvas {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        image-rendering: pixelated;
+        cursor: pointer;
+        z-index: 10;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="gameContainer">
+      <img id="mapOverlay" src="Map.png" alt="Map" />
+      <img id="characterSprite" src="character.jpg" alt="Snorlax" style="display:none;" />
+      <div id="letterOverlay">
+        <div id="letterContent">Loading letter...</div>
+      </div>
+      <canvas id="rpgCanvas" width="960" height="540"></canvas>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("rpgCanvas");
+      const realCtx = canvas.getContext("2d");
+      const colors = { boxBg: "rgba(30, 30, 30, 0.98)", boxBorder: "#fabd2f", text: "#ebdbb2", arrow: "#fabd2f", hpGreen: "#40d040" };
+
+      /* ─── Audio ─── */
+      const bgMusic = new Audio("Main.mp3");
+      const battleMusic = new Audio("Battle.mp3");
+      const hitSFX = new Audio("Hit.mp3");
+      const clickSFX = new Audio("Click.mp3");
+      bgMusic.loop = battleMusic.loop = true;
+      let audioStarted = false;
+
+      function playClick() { clickSFX.currentTime = 0; clickSFX.play().catch(()=>{}); }
+
+      /* ─── Data ─── */
+      let letter2Data = "";
+      let finalLetterData = "";
+
+      fetch("Letter2.txt")
+        .then(r => r.text())
+        .then(d => { letter2Data = d; document.getElementById("letterContent").innerText = d; })
+        .catch(() => { letter2Data = "Error loading Letter2.txt"; });
+
+      fetch("letter.txt")
+        .then(r => r.text())
+        .then(d => { finalLetterData = d; })
+        .catch(() => { finalLetterData = "Error loading letter.txt"; });
+
+      /* ─── State ─── */
+      let stage = 0;
+      let isFinalLetterOpen = false;
+      const STAGE_LINES = {
+        0: ["?", "You turned the letter around."],
+        2: ["...", "You need the HM03 Surf to proceed to Cinnabar Island.", "Look for HM03 Surf?"],
+        4: ["Rish found HM03!", "!", "A Pokémon snatched your HM03!"],
+        5: ["...", "SNORLAX seems to be following you.", "(Most likely due to your berries.)", "Maybe he can take you to Cinnabar Island.", "The water is dyed a deep blue...", "Would you like to SURF?", "SNORLAX used SURF!"],
+        6: ["?", "SNORLAX stumbled on something.", "Rish obtained Monthsary Letter!", "Rish opened the Monthsary Letter."]
+      };
+
+      let msgIndex = 0, visibleChars = 0, isTyping = false, typingInterval = null;
+      let mapVisible = false, mapPromptVisible = false, showYesNo = false;
+      let fading = false, fadeAlpha = 0, fadeDir = 1, fadeCallback = null;
+      
+      let showBattleMenu = false, showMoveMenu = false, showBagMenu = false;
+      let encounterAnimation = false, encounterTimer = 0;
+      let snorlaxHP = 100, targetHP = 100, snorlaxExists = true;
+      let battleMessageActive = false, battleMessageQueue = [];
+      let tackleCount = 0; 
+
+      function startTyping(text) {
+        clearInterval(typingInterval);
+        visibleChars = 0; isTyping = true;
+        typingInterval = setInterval(() => {
+          visibleChars++;
+          if (visibleChars >= text.length) { clearInterval(typingInterval); isTyping = false; }
+        }, 35);
+      }
+
+      function drawBox(x, y, w, h) {
+        realCtx.fillStyle = colors.boxBg;
+        realCtx.fillRect(x, y, w, h);
+        realCtx.strokeStyle = colors.boxBorder;
+        realCtx.lineWidth = 4;
+        realCtx.strokeRect(x+2, y+2, w-4, h-4);
+      }
+
+      function drawHPBar() {
+        if (!showBattleMenu || !snorlaxExists) return;
+        const x=50, y=50, w=350, h=90;
+        drawBox(x, y, w, h);
+        realCtx.fillStyle = colors.text;
+        realCtx.font = "bold 24px 'Fira Mono'";
+        realCtx.fillText("SNORLAX", x+20, y+35);
+        realCtx.fillText("Lv30", x+270, y+35);
+        realCtx.fillStyle = "#444";
+        realCtx.fillRect(x+20, y+55, 310, 15);
+        if (snorlaxHP > targetHP) snorlaxHP -= 0.5;
+        if (snorlaxHP < targetHP) snorlaxHP += 0.5;
+        realCtx.fillStyle = colors.hpGreen;
+        realCtx.fillRect(x+20, y+55, (snorlaxHP/100)*310, 15);
+      }
+
+      function gameLoop() {
+        realCtx.clearRect(0, 0, 960, 540);
+        
+        // Hide dialogue box and UI if the final letter is open
+        if (!encounterAnimation && !mapVisible && !isFinalLetterOpen) {
+          drawBox(20, 380, 920, 140);
+          realCtx.fillStyle = colors.text;
+          realCtx.font = "24px 'Fira Mono'";
+
+          if (showBattleMenu && !battleMessageActive) {
+            if (showMoveMenu) {
+              realCtx.fillText("▶ TACKLE", 60, 455);
+            } else if (showBagMenu) {
+              realCtx.fillText("▶ SITRUS BERRY", 60, 455);
+              realCtx.fillText("  CANCEL", 300, 455);
+            } else {
+              realCtx.fillText("What will YOU do?", 60, 455);
+              realCtx.font = "bold 26px 'Fira Mono'";
+              realCtx.fillText("FIGHT", 620, 435); realCtx.fillText("BAG", 810, 435);
+              realCtx.fillText("POKéMON", 620, 490); realCtx.fillText("RUN", 810, 490);
+            }
+          } else {
+            let line = mapPromptVisible ? "Proceed to Fuchsia City?" : (battleMessageActive ? battleMessageQueue[0] : STAGE_LINES[stage][msgIndex]);
+            realCtx.fillText(line.substring(0, visibleChars), 60, 455);
+          }
+
+          if (showYesNo || mapPromptVisible) {
+            drawBox(760, 240, 160, 110);
+            realCtx.fillStyle = colors.text;
+            realCtx.fillText("YES", 805, 285); realCtx.fillText("NO", 805, 330);
+          }
+          if (showBattleMenu) drawHPBar();
+        }
+        
+        if (encounterAnimation) {
+          encounterTimer++;
+          if (encounterTimer < 80) {
+            realCtx.fillStyle = Math.floor(encounterTimer/10) % 2 === 0 ? "white" : "black";
+            realCtx.fillRect(0, 0, 960, 540);
+          } else {
+            encounterAnimation = false; showBattleMenu = true;
+            const sprite = document.getElementById("characterSprite");
+            sprite.src = "character1.jpg"; 
+            sprite.style.display = "block";
+          }
+        }
+
+        if (fading) {
+          realCtx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
+          realCtx.fillRect(0, 0, 960, 540);
+          fadeAlpha += fadeDir * 0.04;
+          if (fadeDir === 1 && fadeAlpha >= 1) { 
+            fadeDir = -1; 
+            if (fadeCallback) fadeCallback(); 
+          }
+          else if (fadeDir === -1 && fadeAlpha <= 0) { fading = false; }
+        }
+        requestAnimationFrame(gameLoop);
+      }
+
+      canvas.addEventListener("mousedown", (e) => {
+        if (!audioStarted) { bgMusic.play(); audioStarted = true; }
+        if (isTyping || fading) return;
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = (e.clientX - rect.left) * (960 / rect.width);
+        const mouseY = (e.clientY - rect.top) * (540 / rect.height);
+
+        if (isFinalLetterOpen) {
+            document.getElementById("letterOverlay").style.display = "none";
+            isFinalLetterOpen = false;
+            playClick();
+            return;
+        }
+
+        if (mapVisible) {
+          playClick();
+          mapVisible = false; document.getElementById("mapOverlay").style.display = "none";
+          mapPromptVisible = true; startTyping("Proceed to Fuchsia City?"); return;
+        }
+
+        if (showYesNo || mapPromptVisible) {
+          playClick();
+          if (mouseY < 310) { 
+            fading = true; fadeAlpha = 0; fadeDir = 1;
+            fadeCallback = () => {
+              if (mapPromptVisible) {
+                document.body.style.backgroundImage = "url('background2.png')";
+                stage = 2; msgIndex = 0; mapPromptVisible = false;
+              } else {
+                document.body.style.backgroundImage = "url('background3.png')";
+                stage = 4; msgIndex = 0; showYesNo = false;
+              }
+              startTyping(STAGE_LINES[stage][msgIndex]);
+            };
+          }
+          return;
+        }
+
+        if (showBattleMenu) {
+            if (battleMessageActive) {
+                playClick();
+                let finishedMsg = battleMessageQueue.shift();
+                if (finishedMsg === "SNORLAX used rest!") {
+                  targetHP = 100;
+                  document.getElementById("characterSprite").src = "character.jpg"; 
+                }
+                if (finishedMsg === "Rish blacked out!") {
+                  showBattleMenu = false; battleMessageActive = false;
+                  document.getElementById("characterSprite").style.display = "none";
+                  battleMusic.pause(); bgMusic.play();
+                  stage = 5; msgIndex = 0;
+                  document.body.style.backgroundImage = "url('background3.png')";
+                  startTyping(STAGE_LINES[stage][msgIndex]);
+                  return;
+                }
+                visibleChars = 0;
+                if (battleMessageQueue.length > 0) startTyping(battleMessageQueue[0]);
+                else { battleMessageActive = false; showMoveMenu = showBagMenu = false; }
+                return;
+            }
+            if (showMoveMenu) {
+                if (mouseY > 400) { 
+                  hitSFX.play(); targetHP -= 10; 
+                  document.getElementById("characterSprite").src = "character1.jpg"; 
+                  tackleCount++;
+                  battleMessageQueue = tackleCount === 1 ? ["Rish used tackle!", "It's not very effective...", "SNORLAX used rest!"] : ["Rish used tackle!", "It's not very effective...", "SNORLAX ate the HM03!", "SNORLAX used surf!", "It's super effective!", "Rish blacked out!"];
+                  battleMessageActive = true; startTyping(battleMessageQueue[0]);
+                }
+                return;
+            }
+            if (showBagMenu) {
+                if (mouseX < 300 && mouseY > 400) { 
+                    document.getElementById("characterSprite").src = "character1.jpg"; 
+                    battleMessageQueue = ["Rish used the sitrus berry!", "SNORLAX is uninterested in the sitrus berry.", "SNORLAX ate the HM03 instead!", "SNORLAX used surf!", "It's super effective!", "Rish blacked out!"]; 
+                    battleMessageActive = true; startTyping(battleMessageQueue[0]);
+                } else if (mouseX >= 300 && mouseY > 400) { showBagMenu = false; playClick(); }
+                return;
+            }
+            if (mouseX > 620 && mouseX < 800 && mouseY > 400 && mouseY < 455) { playClick(); showMoveMenu = true; } 
+            else if (mouseX > 810 && mouseY > 400 && mouseY < 455) { playClick(); showBagMenu = true; } 
+            else if (mouseX > 620 && mouseX < 800 && mouseY >= 455) { playClick(); battleMessageQueue = ["You don't have any Pokémon!"]; battleMessageActive = true; startTyping(battleMessageQueue[0]); }
+            else if (mouseX > 810 && mouseY >= 455) { playClick(); battleMessageQueue = ["SNORLAX blocked the path!"]; battleMessageActive = true; startTyping(battleMessageQueue[0]); }
+            return;
+        }
+
+        const lines = STAGE_LINES[stage];
+        if (lines && msgIndex < lines.length - 1) { 
+          playClick(); 
+          if (stage === 5 && msgIndex === 3) {
+            fading = true; fadeAlpha = 0; fadeDir = 1;
+            fadeCallback = () => { document.body.style.backgroundImage = "url('background2.png')"; msgIndex++; startTyping(lines[msgIndex]); };
+            return; 
+          }
+          msgIndex++;
+          if (stage === 5 && msgIndex === 1) {
+            const sprite = document.getElementById("characterSprite");
+            sprite.src = "character3.png"; sprite.style.bottom = "auto"; sprite.style.top = "50%"; sprite.style.animation = "none"; sprite.style.transform = "translate(-50%, -50%)"; sprite.style.display = "block";
+          }
+          startTyping(lines[msgIndex]); 
+        }
+        else {
+          if (stage === 0) {
+            playClick(); fading = true; fadeAlpha = 0; fadeDir = 1;
+            fadeCallback = () => { document.getElementById("letterContent").innerText = letter2Data; mapVisible = true; document.getElementById("mapOverlay").style.display = "block"; };
+          } else if (stage === 2) { playClick(); showYesNo = true; }
+          else if (stage === 4) { playClick(); bgMusic.pause(); battleMusic.play(); encounterAnimation = true; }
+          else if (stage === 5) {
+            playClick(); fading = true; fadeAlpha = 0; fadeDir = 1;
+            fadeCallback = () => { document.body.style.backgroundImage = "url('background4.png')"; document.getElementById("characterSprite").style.display = "none"; stage = 6; msgIndex = 0; startTyping(STAGE_LINES[6][0]); };
+          } else if (stage === 6) {
+            // Final letter interaction
+            playClick();
+            isFinalLetterOpen = true;
+            document.getElementById("characterSprite").style.display = "none"; // Hide sprite when letter is opened
+            document.getElementById("letterContent").innerText = finalLetterData;
+            document.getElementById("letterOverlay").style.display = "block";
+          }
+        }
+      });
+
+      window.onload = () => { startTyping(STAGE_LINES[0][0]); gameLoop(); };
+    </script>
+  </body>
+</html>
