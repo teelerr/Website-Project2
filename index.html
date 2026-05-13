@@ -22,6 +22,7 @@
         align-items: center;
         justify-content: center;
         height: 100vh;
+        width: 100vw;
         overflow: hidden;
         font-family: "Fira Mono", monospace;
         transition: background-image 0.5s ease-in-out;
@@ -35,7 +36,18 @@
         border-radius: 6px;
         overflow: hidden;
         background: #000 !important;
+        flex-shrink: 0;
       }
+
+      /* --- Mobile Scaling Fix --- */
+      @media screen and (max-width: 960px) {
+        #gameContainer {
+          /* Scales the container to fit the phone's width */
+          transform: scale(calc(100vw / 960));
+          transform-origin: center center;
+        }
+      }
+
       #mapOverlay {
         position: absolute;
         top: 50%; left: 50%;
@@ -119,7 +131,6 @@
       bgMusic.loop = battleMusic.loop = true;
       let audioStarted = false;
 
-      // Clean Audio Playback Functions
       function playClick() { 
         if (!clickSFX.paused) {
           clickSFX.pause();
@@ -270,6 +281,8 @@
         if (!audioStarted) { bgMusic.play(); audioStarted = true; }
         if (isTyping || fading) return;
         const rect = canvas.getBoundingClientRect();
+        
+        // This math still works because rect.width changes when scaled!
         const mouseX = (e.clientX - rect.left) * (960 / rect.width);
         const mouseY = (e.clientY - rect.top) * (540 / rect.height);
 
