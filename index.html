@@ -232,16 +232,16 @@
           }
 
           if (showYesNo || mapPromptVisible) {
-            drawBox(760, 240, 160, 110);
+            // Smaller box since "NO" is gone
+            drawBox(760, 240, 160, 70);
             realCtx.fillStyle = colors.text;
-            realCtx.fillText("YES", 805, 285); realCtx.fillText("NO", 805, 330);
+            realCtx.fillText("YES", 805, 285);
           }
           if (showBattleMenu) drawHPBar();
         }
         
         if (encounterAnimation) {
           encounterTimer++;
-          // Slower flash animation (extended from 80 to 180 frames)
           if (encounterTimer < 180) {
             realCtx.fillStyle = Math.floor(encounterTimer/15) % 2 === 0 ? "white" : "black";
             realCtx.fillRect(0, 0, 960, 540);
@@ -287,8 +287,9 @@
         }
 
         if (showYesNo || mapPromptVisible) {
-          playClick();
-          if (mouseY < 310) { 
+          // Only trigger if clicking within the box area (YES area)
+          if (mouseX > 760 && mouseX < 920 && mouseY > 240 && mouseY < 310) {
+            playClick();
             fading = true; fadeAlpha = 0; fadeDir = 1;
             fadeCallback = () => {
               if (mapPromptVisible) {
