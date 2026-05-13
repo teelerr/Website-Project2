@@ -40,10 +40,10 @@
       }
 
       /* --- Mobile Scaling Fix --- */
-      @media screen and (max-width: 960px) {
+      @media screen and (max-width: 960px), screen and (max-height: 540px) {
         #gameContainer {
-          /* Scales the container to fit the phone's width */
-          transform: scale(calc(100vw / 960));
+          /* Scales to fit whichever is smaller: the width or the height */
+          transform: scale(min(calc(100vw / 960), calc(100vh / 540)));
           transform-origin: center center;
         }
       }
@@ -282,7 +282,6 @@
         if (isTyping || fading) return;
         const rect = canvas.getBoundingClientRect();
         
-        // This math still works because rect.width changes when scaled!
         const mouseX = (e.clientX - rect.left) * (960 / rect.width);
         const mouseY = (e.clientY - rect.top) * (540 / rect.height);
 
