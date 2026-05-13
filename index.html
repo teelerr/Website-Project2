@@ -119,7 +119,6 @@
       bgMusic.loop = battleMusic.loop = true;
       let audioStarted = false;
 
-      // Clean Audio Playback Functions
       function playClick() { 
         if (!clickSFX.paused) {
           clickSFX.pause();
@@ -242,8 +241,9 @@
         
         if (encounterAnimation) {
           encounterTimer++;
-          if (encounterTimer < 80) {
-            realCtx.fillStyle = Math.floor(encounterTimer/10) % 2 === 0 ? "white" : "black";
+          // Slower flash animation (extended from 80 to 180 frames)
+          if (encounterTimer < 180) {
+            realCtx.fillStyle = Math.floor(encounterTimer/15) % 2 === 0 ? "white" : "black";
             realCtx.fillRect(0, 0, 960, 540);
           } else {
             encounterAnimation = false; showBattleMenu = true;
