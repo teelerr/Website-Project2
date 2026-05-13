@@ -113,10 +113,15 @@
       const battleMusic = new Audio("Battle.mp3");
       const hitSFX = new Audio("Hit.mp3");
       const clickSFX = new Audio("Click.mp3");
+      const surfSFX = new Audio("Surf.mp3");
+      const obtainSFX = new Audio("Obtain.mp3");
+
       bgMusic.loop = battleMusic.loop = true;
       let audioStarted = false;
 
       function playClick() { clickSFX.currentTime = 0; clickSFX.play().catch(()=>{}); }
+      function playSurf() { surfSFX.currentTime = 0; surfSFX.play().catch(()=>{}); }
+      function playObtain() { obtainSFX.currentTime = 0; obtainSFX.play().catch(()=>{}); }
 
       /* ─── Data ─── */
       let letter2Data = "";
@@ -189,7 +194,6 @@
       function gameLoop() {
         realCtx.clearRect(0, 0, 960, 540);
         
-        // Hide dialogue box and UI if the final letter is open
         if (!encounterAnimation && !mapVisible && !isFinalLetterOpen) {
           drawBox(20, 380, 920, 140);
           realCtx.fillStyle = colors.text;
@@ -277,6 +281,9 @@
               } else {
                 document.body.style.backgroundImage = "url('background3.png')";
                 stage = 4; msgIndex = 0; showYesNo = false;
+                // Trigger Obtain HM03 sound here since it's msgIndex 0
+                bgMusic.pause();
+                playObtain();
               }
               startTyping(STAGE_LINES[stage][msgIndex]);
             };
@@ -292,6 +299,11 @@
                   targetHP = 100;
                   document.getElementById("characterSprite").src = "character.jpg"; 
                 }
+                
+                if (battleMessageQueue[0] === "SNORLAX used surf!") {
+                    playSurf();
+                }
+
                 if (finishedMsg === "Rish blacked out!") {
                   showBattleMenu = false; battleMessageActive = false;
                   document.getElementById("characterSprite").style.display = "none";
@@ -339,7 +351,22 @@
             fadeCallback = () => { document.body.style.backgroundImage = "url('background2.png')"; msgIndex++; startTyping(lines[msgIndex]); };
             return; 
           }
+          
           msgIndex++;
+
+          // Stage 4 Music Logic (Found HM03)
+          if (stage === 4 && msgIndex === 1) {
+              bgMusic.play();
+          }
+
+          // Stage 6 Music Logic (Obtained Letter)
+          if (stage === 6 && msgIndex === 2) {
+              bgMusic.pause();
+              playObtain();
+          } else if (stage === 6 && msgIndex === 3) {
+              bgMusic.play();
+          }
+
           if (stage === 5 && msgIndex === 1) {
             const sprite = document.getElementById("characterSprite");
             sprite.src = "character3.png"; sprite.style.bottom = "auto"; sprite.style.top = "50%"; sprite.style.animation = "none"; sprite.style.transform = "translate(-50%, -50%)"; sprite.style.display = "block";
@@ -356,10 +383,9 @@
             playClick(); fading = true; fadeAlpha = 0; fadeDir = 1;
             fadeCallback = () => { document.body.style.backgroundImage = "url('background4.png')"; document.getElementById("characterSprite").style.display = "none"; stage = 6; msgIndex = 0; startTyping(STAGE_LINES[6][0]); };
           } else if (stage === 6) {
-            // Final letter interaction
             playClick();
             isFinalLetterOpen = true;
-            document.getElementById("characterSprite").style.display = "none"; // Hide sprite when letter is opened
+            document.getElementById("characterSprite").style.display = "none";
             document.getElementById("letterContent").innerText = finalLetterData;
             document.getElementById("letterOverlay").style.display = "block";
           }
