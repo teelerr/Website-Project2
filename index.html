@@ -119,18 +119,25 @@
       bgMusic.loop = battleMusic.loop = true;
       let audioStarted = false;
 
-      function playClick() { clickSFX.currentTime = 0; clickSFX.play().catch(()=>{}); }
-      function playSurf() { surfSFX.currentTime = 0; surfSFX.play().catch(()=>{}); }
-      function playObtain() { obtainSFX.currentTime = 0; obtainSFX.play().catch(()=>{}); }
-      
-      // Improved Hit sound logic to prevent clicking/crashing artifacts
+      // Clean Audio Playback Functions
+      function playClick() { 
+        if (!clickSFX.paused) {
+          clickSFX.pause();
+          clickSFX.currentTime = 0;
+        }
+        clickSFX.play().catch(()=>{}); 
+      }
+
       function playHit() { 
         if (!hitSFX.paused) {
-            hitSFX.pause();
-            hitSFX.currentTime = 0;
+          hitSFX.pause();
+          hitSFX.currentTime = 0;
         }
         hitSFX.play().catch(()=>{}); 
       }
+
+      function playSurf() { surfSFX.currentTime = 0; surfSFX.play().catch(()=>{}); }
+      function playObtain() { obtainSFX.currentTime = 0; obtainSFX.play().catch(()=>{}); }
 
       /* ─── Data ─── */
       let letter2Data = "";
