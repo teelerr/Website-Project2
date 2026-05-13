@@ -122,6 +122,15 @@
       function playClick() { clickSFX.currentTime = 0; clickSFX.play().catch(()=>{}); }
       function playSurf() { surfSFX.currentTime = 0; surfSFX.play().catch(()=>{}); }
       function playObtain() { obtainSFX.currentTime = 0; obtainSFX.play().catch(()=>{}); }
+      
+      // Improved Hit sound logic to prevent clicking/crashing artifacts
+      function playHit() { 
+        if (!hitSFX.paused) {
+            hitSFX.pause();
+            hitSFX.currentTime = 0;
+        }
+        hitSFX.play().catch(()=>{}); 
+      }
 
       /* ─── Data ─── */
       let letter2Data = "";
@@ -281,7 +290,6 @@
               } else {
                 document.body.style.backgroundImage = "url('background3.png')";
                 stage = 4; msgIndex = 0; showYesNo = false;
-                // Trigger Obtain HM03 sound here since it's msgIndex 0
                 bgMusic.pause();
                 playObtain();
               }
@@ -320,7 +328,7 @@
             }
             if (showMoveMenu) {
                 if (mouseY > 400) { 
-                  hitSFX.play(); targetHP -= 10; 
+                  playHit(); targetHP -= 10; 
                   document.getElementById("characterSprite").src = "character1.jpg"; 
                   tackleCount++;
                   battleMessageQueue = tackleCount === 1 ? ["Rish used tackle!", "It's not very effective...", "SNORLAX used rest!"] : ["Rish used tackle!", "It's not very effective...", "SNORLAX ate the HM03!", "SNORLAX used surf!", "It's super effective!", "Rish blacked out!"];
@@ -354,12 +362,10 @@
           
           msgIndex++;
 
-          // Stage 4 Music Logic (Found HM03)
           if (stage === 4 && msgIndex === 1) {
               bgMusic.play();
           }
 
-          // Stage 6 Music Logic (Obtained Letter)
           if (stage === 6 && msgIndex === 2) {
               bgMusic.pause();
               playObtain();
